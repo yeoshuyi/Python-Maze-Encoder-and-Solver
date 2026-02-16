@@ -1,4 +1,4 @@
-# Maze Solver by Yeo Shu Yi
+# Maze Encoder and Solver
 ## Maze Encoder
 Maze Encoder takes in a 30x30 pixel picture and makes a .bin file that reconstructs the maze using a custom 32-bit instruction set.
 ### Custom Instruction Set
