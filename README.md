@@ -7,12 +7,14 @@ Maze Encoder takes in a 30x30 pixel picture and makes a .bin file that reconstru
 
 > The main motivation for packaging the instructions in such a way is to make it compressed and serialised. Possible applications would include transmitting this file over UART to a small microcontroller, or converting to a .mem file to initialise a ROM within a SoC. This instruction set compresses the map into around 200 bytes, as compared to the 900 bytes default output from MazeMate, which matters in hardware resource constrained systems.
 
+> Current limitations include only being able to process 30x30 or smaller mazes.
+
 #### OPCODE
 1) 0x1 Represents the Build Wall instruction.
 2) 0x2 Represents the Place Entity instruction.
 #### Build Wall
 1) DATA represents the walls within half a row, with 1 representing a filled wall.
-2) ROW HALF represents the left (Ox0) or right (0xF) half of each row.
+2) ROW HALF represents the left (0x0) or right (0xF) half of each row.
 3) ROW NUMBER represents the row number.
 4) OPCODE fixed as 0x1 for Build Wall instructions.
 #### Place Entity
