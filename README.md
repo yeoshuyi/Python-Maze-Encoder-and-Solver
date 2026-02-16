@@ -49,11 +49,18 @@ SOUTH = 0x4
 WEST = 0x8
 ```
 ## Maze Solver
+### Results
+![alt text](src/maze.gif)
+> Each cycle aligns a new node found for each of the 3 methods. However, this is just a visual representation as the cycle period for each method is different. Refer to elapsed time in the bottom right for a more accurate comparision of efficiency.
 ### Breadth First Search (BFS)
 #### FIFO Queue
-* Utilizes First-In-First-Out queue to track next cells to explore.
-#### Results
-![alt text](src/maze_solve.gif)
+* Utilizes First-In-First-Out queue to track next node.
+* With each cycle, adds neighbouring nodes to the queue.
 ### DFS
+#### FILO Queue
+* Utilizes First-In-Last-Out queue to track next node.
+* With each cycle, adds neighbouring nodes to the queue.
 ### A-Star
-WIP
+#### F-Score
+* Total cost (F-Score) = Path cost (G-Score) + Heuristic (H-Score).
+* Heuristic given by the Manhatten Distance from current location to end point.

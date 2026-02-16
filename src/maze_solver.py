@@ -6,6 +6,7 @@ Takes in binary file encoded by maze_encoder.py
 import struct
 import os
 import heapq
+import time
 from PIL import Image, ImageDraw
 from collections import deque
 
@@ -60,6 +61,7 @@ class MazeSolver:
         bfs_path = []
         bfs_steps = 0
         bfs_set = False
+        bfs_elapsed = 0
 
         dfs_q = deque([(self.start_pos, [self.start_pos])])
         dfs_visited = {self.start_pos}
@@ -67,6 +69,7 @@ class MazeSolver:
         dfs_path = []
         dfs_steps = 0
         dfs_set = False
+        dfs_elapsed = 0
 
         start_h = abs(self.end_pos[0] - self.start_pos[0]) + abs(self.end_pos[1] - self.start_pos[1])
         astar_q = [(start_h, self.start_pos, [self.start_pos])]
@@ -75,6 +78,7 @@ class MazeSolver:
         astar_path = []
         astar_steps = 0
         astar_set = False
+        astar_elapsed = 0
 
         steps = 0
         scale = 12
@@ -82,6 +86,8 @@ class MazeSolver:
         padding = 40
         canvas_w = (maze_w * 3) + (padding * 4)
         canvas_h = maze_w + 100
+
+        curr_time = time.time()
 
         while not (bfs_done and dfs_done and astar_done):
             if bfs_done and not bfs_set:
@@ -96,6 +102,7 @@ class MazeSolver:
             steps += 1
 
             if bfs_q and not bfs_done:
+                curr_time = time.time()
                 (curr_x, curr_y), path = bfs_q.popleft()
                 bfs_path = path
                 if (curr_x, curr_y) == self.end_pos: bfs_done = True
@@ -105,19 +112,35 @@ class MazeSolver:
                         if 0 <= nx < 30 and 0 <= ny < 30 and self.grid[ny][nx] == 0 and (nx, ny) not in bfs_visited:
                             bfs_visited.add((nx, ny))
                             bfs_q.append(((nx, ny), path + [(nx, ny)]))
+                bfs_elapsed += time.time() - curr_time
+                curr_time = time.time()
             
             if dfs_q and not dfs_done:
-                (curr_x, curr_y), path = dfs_q.pop()
-                dfs_path = path
-                dfs_visited.add((curr_x, curr_y))
-                if (curr_x, curr_y) == self.end_pos: dfs_done = True
-                else:
+                curr_time = time.time()
+                new_node = False
+                while dfs_q and not new_node:
+                    (curr_x, curr_y), path = dfs_q.pop()
+
+                    if (curr_x, curr_y) == self.end_pos:
+                        dfs_path = path
+                        dfs_visited.add((curr_x, curr_y))
+                        dfs_done = True
+                        new_node = True
+                        break
+
                     for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
                         nx, ny = curr_x + dx, curr_y + dy
-                        if 0 <= nx < 30 and 0 <= ny < 30 and self.grid[ny][nx] == 0 and (nx, ny) not in dfs_visited:
-                            dfs_q.append(((nx, ny), path + [(nx, ny)]))
+                        if 0 <= nx < 30 and 0 <= ny < 30 and self.grid[ny][nx] == 0:
+                            if (nx, ny) not in dfs_visited:
+                                dfs_visited.add((nx, ny))
+                                dfs_path = path + [(nx, ny)]
+                                dfs_q.append(((nx, ny), dfs_path))
+                                new_node = True
+                dfs_elapsed += time.time() - curr_time
+                curr_time = time.time()
             
             if astar_q and not astar_done:
+                curr_time = time.time()
                 f, (curr_x, curr_y), path = heapq.heappop(astar_q)
                 astar_path = path
                 if (curr_x, curr_y) == self.end_pos: astar_done = True
@@ -130,6 +153,8 @@ class MazeSolver:
                                 astar_visited_costs[(nx, ny)] = new_g
                                 h = abs(self.end_pos[0] - nx) + abs(self.end_pos[1] - ny)
                                 heapq.heappush(astar_q, (new_g + h, (nx, ny), path + [(nx, ny)]))
+                astar_elapsed += time.time() - curr_time
+                curr_time = time.time()
             
             frame = Image.new('RGB', (canvas_w, canvas_h), (240, 240, 240))
             draw = ImageDraw.Draw(frame)
@@ -137,17 +162,20 @@ class MazeSolver:
             self._draw_submaze(
                 draw, 0 * (maze_w + padding) + padding, 50, 
                 scale, bfs_visited, bfs_path, "BFS", 
-                steps if bfs_steps == 0 else bfs_steps
+                steps if bfs_steps == 0 else bfs_steps,
+                bfs_elapsed
             )
             self._draw_submaze(
                 draw, 1 * (maze_w + padding) + padding, 50, 
                 scale, dfs_visited, dfs_path, "DFS", 
-                steps if dfs_steps == 0 else dfs_steps
+                steps if dfs_steps == 0 else dfs_steps,
+                dfs_elapsed
             )
             self._draw_submaze(
                 draw, 2 * (maze_w + padding) + padding, 50,
                 scale, set(astar_visited_costs.keys()), astar_path, "A-Star", 
-                steps if astar_steps == 0 else astar_steps
+                steps if astar_steps == 0 else astar_steps,
+                astar_elapsed
             )
             
             self.frames.append(frame)
@@ -159,9 +187,11 @@ class MazeSolver:
         self.frames[0].save(os.path.join(self.script_dir, GIF_PATH),
             save_all=True, append_images=self.frames[1:], duration=40, loop=0)
 
-    def _draw_submaze(self, draw, offset_x, offset_y, scale, visited, path, title, step_text):
+    def _draw_submaze(self, draw, offset_x, offset_y, scale, visited, path, title, step_text, time):
         draw.text((offset_x + 40, offset_y - 30), title, fill=(0,0,0))
         draw.text((offset_x + 40, offset_y + (30*scale) + 10), f"Steps: {step_text}", fill=(100,100,100))
+        draw.text((offset_x + 120, offset_y + (30*scale) + 10), f"Path Length: {len(path)}", fill=(100,100,100))
+        draw.text((offset_x + 240, offset_y + (30*scale) + 10), f"Elapsed Time: {time*1000:.2f}ms", fill=(100,100,100))
         
         for y in range(30):
             for x in range(30):
