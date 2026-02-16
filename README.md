@@ -57,6 +57,13 @@ WEST = 0x8
 ![alt text](src/maze.gif)
 > Each frame aligns a new node found for each of the 3 methods. However, this is just a visual representation as the frame period for each method is different. Refer to elapsed time in the bottom right for a more accurate comparision of efficiency.
 
+| Criteria | BFS | DFS | A-Star |
+| --- | --- | --- | --- |
+| Steps | 522 | 299 | 466 |
+| Avg. Time per Step (us) | 2.85 | 1.84 | 3.64 |
+| Total Elapsed Time (ms) | 1.49 | 0.55 | 1.70 |
+| Path Length | 178 | 182 | 178
+
 ### Maze Decoder
 * Utilizes the custom 32-bit .bin instruction file to reconstruct the maze.
 * Usage of match case and bit masking mimics how a hardware would multiplex (like match case) and sample specific parts of the instruction (bit masking). This style mimics SystemVerilog idealogy.
