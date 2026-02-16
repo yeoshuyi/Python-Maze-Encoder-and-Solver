@@ -11,17 +11,18 @@ from collections import deque
 
 
 BITSTREAM_PATH = 'maze.bin'
-GIF_PATH = 'maze_bfs.gif'
+GIF_PATH = 'maze.gif'
 
 
 class MazeSolver:
     def __init__(self, path=BITSTREAM_PATH):
         self.script_dir = os.path.dirname(__file__)
         self.bin_path = os.path.join(self.script_dir, path)
-        self.grid = [[0 for _ in range(30)] for _ in range(30)]
+        self.grid = [[0 for i in range(30)] for i in range(30)]
         self.start_pos = None
         self.end_pos = None
         self.frames = []
+        self._parse_bin()
 
     def _parse_bin(self):
         with open(self.bin_path, "rb") as f:
@@ -51,124 +52,132 @@ class MazeSolver:
                             self.start_pos = (x, y)
                         case 0x2:
                             self.end_pos = (x, y)
+    
+    def solve_maze(self):
+        bfs_q = deque([(self.start_pos, [self.start_pos])])
+        bfs_visited = {self.start_pos}
+        bfs_done = False
+        bfs_path = []
+        bfs_steps = 0
+        bfs_set = False
 
-    def _draw_frame(self, visited, current_path=None):
-        scale = 480 // 30
-        img = Image.new('RGB', (480, 480), (255, 255, 255))
-        draw = ImageDraw.Draw(img)
+        dfs_q = deque([(self.start_pos, [self.start_pos])])
+        dfs_visited = {self.start_pos}
+        dfs_done = False
+        dfs_path = []
+        dfs_steps = 0
+        dfs_set = False
 
+        start_h = abs(self.end_pos[0] - self.start_pos[0]) + abs(self.end_pos[1] - self.start_pos[1])
+        astar_q = [(start_h, self.start_pos, [self.start_pos])]
+        astar_visited_costs = {self.start_pos: 0}
+        astar_done = False
+        astar_path = []
+        astar_steps = 0
+        astar_set = False
+
+        steps = 0
+        scale = 12
+        maze_w = 30 * scale
+        padding = 40
+        canvas_w = (maze_w * 3) + (padding * 4)
+        canvas_h = maze_w + 100
+
+        while not (bfs_done and dfs_done and astar_done):
+            if bfs_done and not bfs_set:
+                bfs_steps = steps
+                bfs_set = True
+            if dfs_done and not dfs_set:
+                dfs_steps = steps
+                dfs_set = True
+            if astar_done and not astar_set:
+                astar_steps = steps
+                astar_set = True
+            steps += 1
+
+            if bfs_q and not bfs_done:
+                (curr_x, curr_y), path = bfs_q.popleft()
+                bfs_path = path
+                if (curr_x, curr_y) == self.end_pos: bfs_done = True
+                else:
+                    for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
+                        nx, ny = curr_x + dx, curr_y + dy
+                        if 0 <= nx < 30 and 0 <= ny < 30 and self.grid[ny][nx] == 0 and (nx, ny) not in bfs_visited:
+                            bfs_visited.add((nx, ny))
+                            bfs_q.append(((nx, ny), path + [(nx, ny)]))
+            
+            if dfs_q and not dfs_done:
+                (curr_x, curr_y), path = dfs_q.pop()
+                dfs_path = path
+                dfs_visited.add((curr_x, curr_y))
+                if (curr_x, curr_y) == self.end_pos: dfs_done = True
+                else:
+                    for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
+                        nx, ny = curr_x + dx, curr_y + dy
+                        if 0 <= nx < 30 and 0 <= ny < 30 and self.grid[ny][nx] == 0 and (nx, ny) not in dfs_visited:
+                            dfs_q.append(((nx, ny), path + [(nx, ny)]))
+            
+            if astar_q and not astar_done:
+                f, (curr_x, curr_y), path = heapq.heappop(astar_q)
+                astar_path = path
+                if (curr_x, curr_y) == self.end_pos: astar_done = True
+                else:
+                    for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
+                        nx, ny = curr_x + dx, curr_y + dy
+                        if 0 <= nx < 30 and 0 <= ny < 30 and self.grid[ny][nx] == 0:
+                            new_g = astar_visited_costs[curr_x, curr_y] + 1
+                            if (nx, ny) not in astar_visited_costs or new_g < astar_visited_costs[nx, ny]:
+                                astar_visited_costs[(nx, ny)] = new_g
+                                h = abs(self.end_pos[0] - nx) + abs(self.end_pos[1] - ny)
+                                heapq.heappush(astar_q, (new_g + h, (nx, ny), path + [(nx, ny)]))
+            
+            frame = Image.new('RGB', (canvas_w, canvas_h), (240, 240, 240))
+            draw = ImageDraw.Draw(frame)
+
+            self._draw_submaze(
+                draw, 0 * (maze_w + padding) + padding, 50, 
+                scale, bfs_visited, bfs_path, "BFS", 
+                steps if bfs_steps == 0 else bfs_steps
+            )
+            self._draw_submaze(
+                draw, 1 * (maze_w + padding) + padding, 50, 
+                scale, dfs_visited, dfs_path, "DFS", 
+                steps if dfs_steps == 0 else dfs_steps
+            )
+            self._draw_submaze(
+                draw, 2 * (maze_w + padding) + padding, 50,
+                scale, set(astar_visited_costs.keys()), astar_path, "A-Star", 
+                steps if astar_steps == 0 else astar_steps
+            )
+            
+            self.frames.append(frame)
+        
+        #Add 30 frame delay
+        for i in range(30):
+            self.frames.append(frame)
+        
+        self.frames[0].save(os.path.join(self.script_dir, GIF_PATH),
+            save_all=True, append_images=self.frames[1:], duration=40, loop=0)
+
+    def _draw_submaze(self, draw, offset_x, offset_y, scale, visited, path, title, step_text):
+        draw.text((offset_x + 40, offset_y - 30), title, fill=(0,0,0))
+        draw.text((offset_x + 40, offset_y + (30*scale) + 10), f"Steps: {step_text}", fill=(100,100,100))
+        
         for y in range(30):
             for x in range(30):
-                rect = [x * scale, y * scale, (x + 1) * scale, (y + 1) * scale]
-                if self.grid[y][x] == 1:
-                    draw.rectangle(rect, fill=(0, 0, 0))
-                elif (x, y) in visited:
-                    draw.rectangle(rect, fill=(0, 255, 0)) 
+                rect = [offset_x + x*scale, offset_y + y*scale, offset_x + (x+1)*scale, offset_y + (y+1)*scale]
+                if self.grid[y][x] == 1: draw.rectangle(rect, fill=(0,0,0))
+                elif (x, y) in visited: draw.rectangle(rect, fill=(200, 255, 200))
         
-        if current_path:
-            for x, y in current_path:
-                rect = [x * scale, y * scale, (x + 1) * scale, (y + 1) * scale]
-                draw.rectangle(rect, fill=(255, 0, 0))
+        for x, y in path:
+            rect = [offset_x + x*scale, offset_y + y*scale, offset_x + (x+1)*scale, offset_y + (y+1)*scale]
+            draw.rectangle(rect, fill=(255, 0, 0))
 
         for pos, color in [(self.start_pos, (0, 183, 239)), (self.end_pos, (237, 28, 36))]:
             if pos:
                 x, y = pos
-                draw.rectangle([x*scale, y*scale, (x+1)*scale, (y+1)*scale], fill=color)
-        
-        self.frames.append(img)
-
-    def _solve_bfs(self):
-        self._parse_bin()
-
-        queue = deque([(self.start_pos, [self.start_pos])])
-        visited = {self.start_pos}
-
-        while queue:
-            (curr_x, curr_y), path = queue.popleft()
-            
-            if (curr_x, curr_y) == self.end_pos:
-                #Freeze for 10 frames
-                for i in range(10): self._draw_frame(visited, path)
-                break
-
-            self._draw_frame(visited, path)
-
-            for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
-                nx, ny = curr_x + dx, curr_y + dy
-                if 0 <= nx < 30 and 0 <= ny < 30 and self.grid[ny][nx] == 0 and (nx, ny) not in visited:
-                    visited.add((nx, ny))
-                    queue.append(((nx, ny), path + [(nx, ny)]))
-
-        self.frames[0].save(
-            os.path.join(self.script_dir, GIF_PATH),
-            save_all=True, append_images=self.frames[1:], 
-            optimize=False, duration=40, loop=0
-        )
-
-    def _solve_dfs(self):
-        self._parse_bin()
-
-        queue = deque([(self.start_pos, [self.start_pos])])
-        visited = {self.start_pos}
-
-        while queue:
-            (curr_x, curr_y), path = queue.pop()
-            visited.add((curr_x, curr_y))
-            
-            if (curr_x, curr_y) == self.end_pos:
-                #Freeze for 10 frames
-                for i in range(10): self._draw_frame(visited, path)
-                break
-
-            self._draw_frame(visited, path)
-
-            for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
-                nx, ny = curr_x + dx, curr_y + dy
-                if 0 <= nx < 30 and 0 <= ny < 30 and self.grid[ny][nx] == 0 and (nx, ny) not in visited:
-                    queue.append(((nx, ny), path + [(nx, ny)]))
-
-        self.frames[0].save(
-            os.path.join(self.script_dir, GIF_PATH),
-            save_all=True, append_images=self.frames[1:], 
-            optimize=False, duration=40, loop=0
-        )
-    
-    def _solve_astar(self):
-        self._parse_bin()
-
-        #Heuristics uses Manhattan Distance
-        start_h = abs(self.end_pos[0] - self.start_pos[0]) + abs(self.end_pos[1] - self.start_pos[1])
-        queue = [(start_h, self.start_pos, [self.start_pos])]
-        visited = {self.start_pos: 0}
-
-        while queue:
-            #F = G + H
-            f_score, (curr_x, curr_y), path = heapq.heappop(queue)
-
-            if (curr_x, curr_y) == self.end_pos:
-                for i in range(10): self._draw_frame(visited, path)
-                break
-            
-            self._draw_frame(visited, path)
-
-            for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
-                nx, ny = curr_x + dx, curr_y + dy
-                
-                if 0 <= nx < 30 and 0 <= ny < 30 and self.grid[ny][nx] == 0:
-                    new_g = visited[(curr_x, curr_y)] + 1
-                    
-                    if (nx, ny) not in visited or new_g < visited[(nx, ny)]:
-                        visited[(nx, ny)] = new_g
-                        h = abs(self.end_pos[0] - nx) + abs(self.end_pos[1] - ny)
-                        f = new_g + h
-                        heapq.heappush(queue, (f, (nx, ny), path + [(nx, ny)]))
-        
-        self.frames[0].save(
-            os.path.join(self.script_dir, GIF_PATH),
-            save_all=True, append_images=self.frames[1:], 
-            optimize=False, duration=40, loop=0
-        )
+                draw.rectangle([offset_x + x*scale, offset_y + y*scale, offset_x + (x+1)*scale, offset_y + (y+1)*scale], fill=color)
 
 if __name__ == "__main__":
     solver = MazeSolver(BITSTREAM_PATH)
-    solver._solve_astar()
+    solver.solve_maze()
