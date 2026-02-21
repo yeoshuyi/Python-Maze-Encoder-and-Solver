@@ -59,10 +59,10 @@ WEST = 0x8
 
 | Criteria | BFS | Greedy DFS | A-Star |
 | --- | --- | --- | --- |
-| Steps | 522 | 299 | 466 |
-| Avg. Time per Step (us) | 2.85 | 1.84 | 3.64 |
-| Total Elapsed Time (ms) | 1.49 | 0.55 | 1.70 |
-| Path Length | 178 | 182 | 178
+| Steps | 539 | 234 | 528 |
+| Avg. Time per Step (us) | 2.08 | 3.24 | 2.82 |
+| Total Elapsed Time (ms) | 1.12 | 0.76 | 1.49 |
+| Path Length | 181 | 181 | 181
 
 We see that for small maps, a simple bruteforce algorithm like BFS actually beats A-Star. Even though more tiles were explored over more cycles, BFS has less logic overhead which resulted in faster elapsed time when compared to A-Star. Looking at the dinosour head, we also observe that the path taken by BFS tends to spread more radially, while DFS and A-Star tends to take a more perpendicular route. This is due to DFS and A-Star using manhatten distance as the main heuristic, which does not optimize for diagonal movements.
 
