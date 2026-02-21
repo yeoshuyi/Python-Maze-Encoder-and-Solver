@@ -120,6 +120,7 @@ class MazeSolver:
                 new_node = False
                 while dfs_q and not new_node:
                     (curr_x, curr_y), path = dfs_q.pop()
+                    dfs_path = path
 
                     if (curr_x, curr_y) == self.end_pos:
                         dfs_path = path
@@ -127,15 +128,20 @@ class MazeSolver:
                         dfs_done = True
                         new_node = True
                         break
-
+                    
+                    neighbors = []
                     for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
                         nx, ny = curr_x + dx, curr_y + dy
                         if 0 <= nx < 30 and 0 <= ny < 30 and self.grid[ny][nx] == 0:
                             if (nx, ny) not in dfs_visited:
-                                dfs_visited.add((nx, ny))
-                                dfs_path = path + [(nx, ny)]
-                                dfs_q.append(((nx, ny), dfs_path))
-                                new_node = True
+                                neighbors.append((nx, ny))
+
+                    neighbors.sort(key=lambda pos: abs(pos[0] - self.end_pos[0]) + abs(pos[1] - self.end_pos[1]), reverse=True)
+
+                    for nx, ny in neighbors:
+                        dfs_visited.add((nx, ny))
+                        dfs_q.append(((nx, ny), path + [(nx, ny)]))
+                        new_node = True
                 dfs_elapsed += time.time() - curr_time
                 curr_time = time.time()
             
@@ -167,7 +173,7 @@ class MazeSolver:
             )
             self._draw_submaze(
                 draw, 1 * (maze_w + padding) + padding, 50, 
-                scale, dfs_visited, dfs_path, "DFS", 
+                scale, dfs_visited, dfs_path, " Greedy DFS", 
                 steps if dfs_steps == 0 else dfs_steps,
                 dfs_elapsed
             )

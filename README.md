@@ -57,12 +57,14 @@ WEST = 0x8
 ![alt text](src/maze.gif)
 > Each frame aligns a new node found for each of the 3 methods. However, this is just a visual representation as the frame period for each method is different. Refer to elapsed time in the bottom right for a more accurate comparision of efficiency.
 
-| Criteria | BFS | DFS | A-Star |
+| Criteria | BFS | Greedy DFS | A-Star |
 | --- | --- | --- | --- |
 | Steps | 522 | 299 | 466 |
 | Avg. Time per Step (us) | 2.85 | 1.84 | 3.64 |
 | Total Elapsed Time (ms) | 1.49 | 0.55 | 1.70 |
 | Path Length | 178 | 182 | 178
+
+We see that for small maps, a simple bruteforce algorithm like BFS actually beats A-Star. Even though more tiles were explored over more cycles, BFS has less logic overhead which resulted in faster elapsed time when compared to A-Star. Looking at the dinosour head, we also observe that the path taken by BFS tends to spread more radially, while DFS and A-Star tends to take a more perpendicular route. This is due to DFS and A-Star using manhatten distance as the main heuristic, which does not optimize for diagonal movements.
 
 ### Maze Decoder
 * Utilizes the custom 32-bit .bin instruction file to reconstruct the maze.
@@ -118,10 +120,12 @@ if bfs_q and not bfs_done:
     bfs_elapsed += time.time() - curr_time
     curr_time = time.time()
 ```
-### DFS
+### Greedy DFS
 #### FILO Queue
 * Utilizes First-In-Last-Out queue to track next node.
 * With each cycle, adds neighbouring nodes to the queue.
+* Prioritise neighbour nodes with lowest manhatten distance (Greedy).
+* For small maps, the greedy system might actually make algo slower due to extra overhead with every step.
 #### Algorithm
 ```python
 if dfs_q and not dfs_done:
