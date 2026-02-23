@@ -54,7 +54,7 @@ WEST = 0x8
 
 ## Maze Solver
 ### Results (Single Task)
-![alt text](src/maze.gif)
+![alt text](src/old/maze.gif)
 > Each frame aligns a new node found for each of the 3 methods. However, this is just a visual representation as the frame period for each method is different. Refer to elapsed time in the bottom right for a more accurate comparision of efficiency.
 
 We see that for small maps, a simple bruteforce algorithm like BFS actually beats A-Star. Even though more tiles were explored over more cycles, BFS has less logic overhead which resulted in faster elapsed time when compared to A-Star. Looking at the dinosour head, we also observe that the path taken by BFS tends to spread more radially, while DFS and A-Star tends to take a more perpendicular route. This is due to DFS and A-Star using manhatten distance as the main heuristic, which does not optimize for diagonal movements.
