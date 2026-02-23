@@ -1,7 +1,7 @@
 """
 Encodes a 30x30 pixel image into bitstream following custom 32-bit instruction set.
 
-Refer to inst_set.md for more information.
+Refer to SETUP.md for usage.
 """
 
 
@@ -15,6 +15,7 @@ BITSTREAM_PATH = 'maze_v2.bin'
 
 
 class MazeInstruction:
+    """Parses pixel information to custom instruction"""
 
     #OPCODES
     BUILD_WALL = 0x1
@@ -44,13 +45,18 @@ class MazeInstruction:
     SOUTH = 0x4
     WEST = 0x8
 
+
     def __init__(self, path=IMAGE_PATH):
+        """Init Read Write"""
+
         self.bitstream = []
         self.script_dir = os.path.dirname(__file__)
         self.image_path = os.path.join(self.script_dir, path)
         self.img = Image.open(self.image_path).convert('RGB')
     
     def _gen_wall(self, x, y):
+        """Generate Walls if Black, logs L/R half"""
+
         if self.img.getpixel((x,y)) == (0, 0, 0):
             if x > 14:
                 self.data_right |= (1 << (14 - (x - 15)))
@@ -58,6 +64,8 @@ class MazeInstruction:
                 self.data_left |= (1 << (14-x))
 
     def _gen_entity(self, x, y):
+        """Instructions for place entity opcode"""
+
         instr = 0
         match self.img.getpixel((x,y)):
             case self.STARTPOINT:
@@ -118,12 +126,12 @@ class MazeInstruction:
                     | (orientation << 4) 
                     | self.PLACE_ENT
                 )
-
-
         if instr:
             self.bitstream.append(instr)
 
     def generate_bitstream(self, path=BITSTREAM_PATH):
+        """Main function for bitstream generation"""
+
         self.bin_path = os.path.join(self.script_dir, path)
         for y in range(30):
             self.data_left = 0
@@ -135,6 +143,7 @@ class MazeInstruction:
             instr_2 = ((self.data_right) << 16) | (0xF << 12) | (y << 4) | self.BUILD_WALL
             self.bitstream.append(instr_1)
             self.bitstream.append(instr_2)
+            
         binary_data = struct.pack(f'>{len(self.bitstream)}I', *self.bitstream)
         with open(self.bin_path, "wb") as f:
             f.write(binary_data)
