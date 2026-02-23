@@ -1,0 +1,288 @@
+"""
+Takes in binary file encoded by maze_encoder.py
+"""
+
+
+import struct
+import os
+import heapq
+import time
+from PIL import Image, ImageDraw
+from collections import deque
+
+
+BITSTREAM_PATH = 'maze_v2.bin'
+GIF_PATH = 'maze_v2.gif'
+
+
+class MazeSolverV2:
+    def __init__(self, path=BITSTREAM_PATH):
+        self.script_dir = os.path.dirname(__file__)
+        self.bin_path = os.path.join(self.script_dir, path)
+        self.grid = [[0 for i in range(30)] for i in range(30)]
+        self.start_pos = None
+        self.end_pos = None
+        self.frames = []
+        self.entities = {
+            'gems': [],
+            'monsters': [],
+            'hearts': []
+        }
+        self._parse_bin()
+
+    def _parse_bin(self):
+        with open(self.bin_path, "rb") as f:
+            data = f.read()
+            count = len(data) // 4
+            instructions = struct.unpack(f'>{count}I', data)
+
+        for instr in instructions:
+            opcode = instr & 0xF
+            match opcode:
+                case 0x1:
+                    y = (instr >> 4) & 0xFF
+                    half = (instr >> 12) & 0xF
+                    wall_data = (instr >> 16) & 0x7FFF
+                    
+                    for i in range(15):
+                        if wall_data & (1 << (14 - i)):
+                            x = i if half == 0 else i + 15
+                            if 0 <= x < 30 and 0 <= y < 30:
+                                self.grid[y][x] = 1
+                case 0x2:
+                    y = (instr >> 24) & 0xFF
+                    x = (instr >> 16) & 0xFF
+                    funct1 = (instr >> 12) & 0xF
+                    funct2 = (instr >> 8) & 0xF
+                    match funct1:
+                        case 0x1:
+                            match funct2:
+                                case 0x1:
+                                    self.start_pos = (x, y)
+                                case 0x2:
+                                    self.end_pos = (x, y)
+                        case 0x2:
+                            self.entities['hearts'].append((x,y))
+                        case 0x4:
+                            self.entities['gems'].append((x,y))
+                        case 0x8:
+                            self.entities['monsters'].append((x,y))
+    
+    def _draw_submaze(self, draw, offset_x, offset_y, scale, visited, path, title, step_text, time, goal_idx):
+
+        entity_colors = {
+            'hearts': (34, 177, 80),
+            'gems': (255, 242, 0),
+            'monsters': (111, 49, 152)
+        }
+
+        draw.text((offset_x + 40, offset_y - 30), title, fill=(0,0,0))
+        draw.text((offset_x + 40, offset_y + (30*scale) + 10), f"Steps: {step_text}", fill=(100,100,100))
+        draw.text((offset_x + 120, offset_y + (30*scale) + 10), f"Path Length: {len(path)}", fill=(100,100,100))
+        draw.text((offset_x + 240, offset_y + (30*scale) + 10), f"Elapsed Time: {time*1000:.2f}ms", fill=(100,100,100))
+        
+        for y in range(30):
+            for x in range(30):
+                rect = [offset_x + x*scale, offset_y + y*scale, offset_x + (x+1)*scale, offset_y + (y+1)*scale]
+                if self.grid[y][x] == 1: draw.rectangle(rect, fill=(0,0,0))
+                elif (x, y) in visited: draw.rectangle(rect, fill=(200, 255, 200))
+        
+        for key, color in entity_colors.items():
+            for (ex, ey) in self.entities[key]:
+                rect = [offset_x + ex*scale, offset_y + ey*scale, offset_x + (ex+1)*scale, offset_y + (ey+1)*scale]
+                draw.rectangle(rect, fill=color)
+        
+        for x, y in path:
+            rect = [offset_x + x*scale, offset_y + y*scale, offset_x + (x+1)*scale, offset_y + (y+1)*scale]
+            draw.rectangle(rect, fill=(255, 0, 0))
+
+        for pos, color in [(self.start_pos, (0, 183, 239)), (self.end_pos, (237, 28, 36))]:
+            if pos:
+                x, y = pos
+                draw.rectangle([offset_x + x*scale, offset_y + y*scale, offset_x + (x+1)*scale, offset_y + (y+1)*scale], fill=color)
+        
+        if goal_idx < len(self.goal_path):
+            tx, ty = self.goal_path[goal_idx]
+            rect = [offset_x + tx*scale, offset_y + ty*scale, offset_x + (tx+1)*scale, offset_y + (ty+1)*scale]
+            draw.rectangle(rect, outline=(255, 165, 0), width=3)
+    def _calculate_hearts(self):
+        hp = 6
+        monster_count = len(self.entities['monsters'])
+        net_hp_needed = monster_count - hp
+        hearts_needed = max(0, (net_hp_needed + 1) // 2) 
+        return hearts_needed
+    
+    def _get_path(self):
+        current_hp = 6
+        current_pos = self.start_pos
+        self.goal_path = []
+        objectives = self.entities['gems'][:] + self.entities['monsters'][:]
+        hearts_available = self.entities['hearts'][:]
+
+        while objectives:
+            objectives.sort(key=lambda p: abs(p[0] - current_pos[0]) + abs(p[1] - current_pos[1]))
+            target = objectives[0]
+
+            if target in self.entities['monsters'] and current_hp <= 1:
+                hearts_available.sort(key=lambda p: abs(p[0] - current_pos[0]) + abs(p[1] - current_pos[1]))
+                heart_target = hearts_available.pop(0)
+                self.goal_path.append(heart_target)
+                current_pos = heart_target
+                current_hp += 2
+            
+            target = objectives.pop(0)
+            self.goal_path.append(target)
+            current_pos = target
+            
+            if target in self.entities['monsters']:
+                current_hp -= 1
+        
+        self.goal_path.append(self.end_pos)
+
+    def solve_maze(self):
+        self._get_path()
+
+        bfs = [0, [self.start_pos], {self.start_pos}, deque([(self.start_pos, [self.start_pos])]), False, 0, 0]
+        dfs = [0, [self.start_pos], {self.start_pos}, deque([(self.start_pos, [self.start_pos])]), False, 0, 0]
+        hugleft = [0, [self.start_pos], {self.start_pos}, self.start_pos, False, 0, 0, (0, 1)]
+        
+        start_h = abs(self.goal_path[0][0]-self.start_pos[0]) + abs(self.goal_path[0][1]-self.start_pos[1])
+        astar = [0, [self.start_pos], {self.start_pos: 0}, [(start_h, self.start_pos, [self.start_pos])], False, 0, 0]
+
+        total_steps = 0
+        scale = 12
+        maze_w, padding = 30 * scale, 40
+        canvas_w, canvas_h = (maze_w * 4) + (padding * 4), maze_w + 100
+
+        while not (bfs[4] and dfs[4] and astar[4] and hugleft[4]):
+            total_steps += 1
+
+            if not hugleft[4]:
+                hugleft[6] += 1
+                t0 = time.time()
+
+                cx, cy = hugleft[3]
+                cdx, cdy = hugleft[7]
+                path = hugleft[1]
+
+                directions = [
+                    (cdy, -cdx),  #Left
+                    (cdx, cdy),   #Front
+                    (-cdy, cdx),  #Right
+                    (-cdx, -cdy)  #Back
+                ]
+
+                for dx, dy in directions:
+                    nx, ny = cx + dx, cy + dy
+                    if 0 <= nx < 30 and 0 <= ny < 30 and self.grid[ny][nx] == 0:
+                        new_pos = (nx, ny)
+                        hugleft[3] = new_pos
+                        hugleft[7] = (dx, dy)
+                        hugleft[1].append(new_pos)
+                        hugleft[2].add(new_pos)
+                        
+                        for i in range(hugleft[0], len(self.goal_path)):
+                            if new_pos == self.goal_path[i]:
+                                hugleft[0] = i + 1
+                                if hugleft[0] >= len(self.goal_path):
+                                    hugleft[4] = True
+                                break
+                        break
+                hugleft[5] += time.time() - t0
+            
+            if not bfs[4]:
+                bfs[6] += 1
+                t0 = time.time()
+                if bfs[3]:
+                    (cx, cy), path = bfs[3].popleft()
+                    
+                    for i in range(bfs[0], len(self.goal_path)):
+                        if (cx, cy) == self.goal_path[i]:
+                            bfs[0] = i + 1
+                            bfs[1] = path
+                            if bfs[0] >= len(self.goal_path): 
+                                bfs[4] = True
+                            else:
+                                bfs[3] = deque([( (cx, cy), path )])
+                                bfs[2] = {(cx, cy)}
+                            break
+                    
+                    if not bfs[4]:
+                        for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
+                            nx, ny = cx + dx, cy + dy
+                            if 0 <= nx < 30 and 0 <= ny < 30 and self.grid[ny][nx] == 0 and (nx, ny) not in bfs[2]:
+                                bfs[2].add((nx, ny))
+                                bfs[3].append(((nx, ny), path + [(nx, ny)]))
+                bfs[5] += time.time() - t0
+
+            if not dfs[4]:
+                dfs[6] += 1
+                t0 = time.time()
+                if dfs[3]:
+                    (cx, cy), path = dfs[3].pop()
+                    for i in range(dfs[0], len(self.goal_path)):
+                        if (cx, cy) == self.goal_path[i]:
+                            dfs[0] = i + 1
+                            dfs[1] = path
+                            if dfs[0] >= len(self.goal_path): dfs[4] = True
+                            else:
+                                dfs[3] = deque([( (cx, cy), path )])
+                                dfs[2] = {(cx, cy)}
+                            break
+                    if not dfs[4]:
+                        neighbors = []
+                        target = self.goal_path[dfs[0]]
+                        for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
+                            nx, ny = cx + dx, cy + dy
+                            if 0 <= nx < 30 and 0 <= ny < 30 and self.grid[ny][nx] == 0 and (nx, ny) not in dfs[2]:
+                                neighbors.append((nx, ny))
+                        neighbors.sort(key=lambda p: abs(p[0]-target[0]) + abs(p[1]-target[1]), reverse=True)
+                        for n in neighbors:
+                            dfs[2].add(n); dfs[3].append((n, path + [n]))
+                dfs[5] += time.time() - t0
+
+            if not astar[4]:
+                astar[6] += 1
+                t0 = time.time()
+                if astar[3]:
+                    f, (cx, cy), path = heapq.heappop(astar[3])
+                    for i in range(astar[0], len(self.goal_path)):
+                        if (cx, cy) == self.goal_path[i]:
+                            astar[0] = i + 1
+                            astar[1] = path
+                            if astar[0] >= len(self.goal_path): astar[4] = True
+                            else:
+                                target = self.goal_path[astar[0]]
+                                astar[2] = {(cx, cy): 0}
+                                h = abs(target[0]-cx) + abs(target[1]-cy)
+                                astar[3] = [(h, (cx, cy), path)]
+                            break
+                    if not astar[4]:
+                        target = self.goal_path[astar[0]]
+                        for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
+                            nx, ny = cx+dx, cy+dy
+                            if 0 <= nx < 30 and 0 <= ny < 30 and self.grid[ny][nx] == 0:
+                                new_g = astar[2][(cx, cy)] + 1
+                                if (nx, ny) not in astar[2] or new_g < astar[2][(nx, ny)]:
+                                    astar[2][(nx, ny)] = new_g
+                                    h = abs(target[0]-nx) + abs(target[1]-ny)
+                                    heapq.heappush(astar[3], (new_g+h, (nx, ny), path+[(nx, ny)]))
+                astar[5] += time.time() - t0
+
+            frame = Image.new('RGB', (canvas_w, canvas_h), (240, 240, 240))
+            draw = ImageDraw.Draw(frame)
+            self._draw_submaze(draw, 0*(maze_w+padding)+padding, 50, scale, hugleft[2], hugleft[1], "Hug Left", hugleft[6], hugleft[5], hugleft[0])
+            self._draw_submaze(draw, 1*(maze_w+padding)+padding, 50, scale, bfs[2], bfs[1], "BFS", bfs[6], bfs[5], bfs[0])
+            self._draw_submaze(draw, 2*(maze_w+padding)+padding, 50, scale, dfs[2], dfs[1], "Greedy DFS", dfs[6], dfs[5], dfs[0])
+            self._draw_submaze(draw, 3*(maze_w+padding)+padding, 50, scale, set(astar[2].keys()) if isinstance(astar[2], dict) else astar[2], astar[1], "A-Star", astar[6], astar[5], astar[0])
+            self.frames.append(frame)
+        
+        for i in range(30):
+            self.frames.append(frame)
+        
+        self.frames[0].save(os.path.join(self.script_dir, GIF_PATH),
+            save_all=True, append_images=self.frames[1:], duration=40, loop=0)
+
+if __name__ == "__main__":
+    solver = MazeSolverV2(BITSTREAM_PATH)
+    solver.solve_maze()
