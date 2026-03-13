@@ -1,4 +1,16 @@
 # Setup Instructions
+
+## Alternate Setup
+#### Via make
+* Makefile has been added for ease of use for supported systems.
+
+```bash
+make setup   #Create venv and install requirements
+make encode  #Generate maze_v2.bin from maze.png
+make solve   #Generate maze_v2.gif from maze_v2.bin
+make clean   #Remove temporary files and venv
+```
+
 ## Prerequisites
 * Developed on Python 3.12.3 (Should be forward compatible up till Python 3.14 as it only requires NumPy and Pillow)
 * Bash shown is for Unix. Windows... Lazy... Google the equivalent...

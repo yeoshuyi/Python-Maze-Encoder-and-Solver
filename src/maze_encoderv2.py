@@ -143,10 +143,11 @@ class MazeInstruction:
             instr_2 = ((self.data_right) << 16) | (0xF << 12) | (y << 4) | self.BUILD_WALL
             self.bitstream.append(instr_1)
             self.bitstream.append(instr_2)
-            
+
         binary_data = struct.pack(f'>{len(self.bitstream)}I', *self.bitstream)
         with open(self.bin_path, "wb") as f:
             f.write(binary_data)
+
 
 if __name__ == "__main__":
     encoder = MazeInstruction(IMAGE_PATH)
